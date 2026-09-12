@@ -1,4 +1,5 @@
 mod downloader;
+mod import;
 mod limiter;
 mod queue;
 mod state;
@@ -12,6 +13,7 @@ use clap::{Parser, Subcommand};
 use indicatif::MultiProgress;
 
 use crate::downloader::{filename_from_url, Downloader};
+use crate::import::{choose_jobs, parse_link_file, write_queue_file};
 use crate::queue::{parse_queue_file, run_queue, Job};
 use crate::state::DownloadState;
 
@@ -59,6 +61,28 @@ enum Command {
         /// Start at a wall-clock time today/tomorrow, e.g. --at 02:30
         #[arg(long)]
         at: Option<String>,
+    },
+    /// Import links from a .txt file, tick the ones you want, then queue them.
+    Import {
+        /// Text file containing http/https links (one per line, or mixed in text).
+        file: PathBuf,
+        #[arg(short, long, default_value = ".")]
+        dir: PathBuf,
+        #[arg(short = 'c', long, default_value_t = 8)]
+        connections: u64,
+        #[arg(short = 'j', long, default_value_t = 2)]
+        parallel: usize,
+        #[arg(long, default_value = "0")]
+        limit: String,
+        /// Start the queue at a wall-clock time, e.g. --at 02:30
+        #[arg(long)]
+        at: Option<String>,
+        /// Skip the selection window and take every link.
+        #[arg(long)]
+        all: bool,
+        /// Save the picked links to a queue file instead of downloading now.
+        #[arg(long)]
+        save: Option<PathBuf>,
     },
     /// Show saved progress for a partially downloaded file.
     Status {
