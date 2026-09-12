@@ -169,8 +169,12 @@ impl Downloader {
         for task in tasks {
             match task.await {
                 Ok(Ok(())) => {}
-                Ok(Err(err)) => error.get_or_insert(err),
-                Err(err) => error.get_or_insert(anyhow!(err)),
+                Ok(Err(err)) => {
+                    error.get_or_insert(err);
+                }
+                Err(err) => {
+                    error.get_or_insert(anyhow!(err));
+                }
             };
         }
 
