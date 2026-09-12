@@ -1,4 +1,5 @@
 mod downloader;
+mod import;
 mod limiter;
 mod queue;
 mod state;
@@ -12,6 +13,7 @@ use clap::{Parser, Subcommand};
 use indicatif::MultiProgress;
 
 use crate::downloader::{filename_from_url, Downloader};
+use crate::import::{choose_jobs, parse_link_file, write_queue_file};
 use crate::queue::{parse_queue_file, run_queue, Job};
 use crate::state::DownloadState;
 
@@ -59,6 +61,28 @@ enum Command {
         /// Start at a wall-clock time today/tomorrow, e.g. --at 02:30
         #[arg(long)]
         at: Option<String>,
+    },
+    /// Import links from a .txt file, tick the ones you want, then queue them.
+    Import {
+        /// Text file containing http/https links (one per line, or mixed in text).
+        file: PathBuf,
+        #[arg(short, long, default_value = ".")]
+        dir: PathBuf,
+        #[arg(short = 'c', long, default_value_t = 8)]
+        connections: u64,
+        #[arg(short = 'j', long, default_value_t = 2)]
+        parallel: usize,
+        #[arg(long, default_value = "0")]
+        limit: String,
+        /// Start the queue at a wall-clock time, e.g. --at 02:30
+        #[arg(long)]
+        at: Option<String>,
+        /// Skip the selection window and take every link.
+        #[arg(long)]
+        all: bool,
+        /// Save the picked links to a queue file instead of downloading now.
+        #[arg(long)]
+        save: Option<PathBuf>,
     },
     /// Show saved progress for a partially downloaded file.
     Status {
@@ -120,6 +144,41 @@ async fn main() -> Result<()> {
             let limit = parse_size(&limit)?;
             let downloader = Downloader::new(connections, limit, cancel.clone())?;
             println!("starting {} job(s), {parallel} at a time", jobs.len());
+            let report = run_queue(downloader, jobs, parallel, cancel).await?;
+            print_report(report.completed, &report.failed);
+        }
+
+        Command::Import { file, dir, connections, parallel, limit, at, all, save } => {
+            let found = parse_link_file(&file, &dir)?;
+            if found.is_empty() {
+                bail!("no http/https links found in {}", file.display());
+            }
+            println!("found {} link(s) in {}", found.len(), file.display());
+
+            // The picker needs a real terminal, so run it off the async runtime.
+            let jobs = if all {
+                found
+            } else {
+                tokio::task::spawn_blocking(move || choose_jobs(found)).await??
+            };
+
+            if jobs.is_empty() {
+                println!("nothing selected");
+                return Ok(());
+            }
+            println!("{} link(s) selected", jobs.len());
+
+            if let Some(path) = save {
+                write_queue_file(&jobs, &path)?;
+                println!("saved to {} - run: rdm queue {}", path.display(), path.display());
+                return Ok(());
+            }
+
+            if let Some(at) = at {
+                wait_until(&at).await?;
+            }
+            let limit = parse_size(&limit)?;
+            let downloader = Downloader::new(connections, limit, cancel.clone())?;
             let report = run_queue(downloader, jobs, parallel, cancel).await?;
             print_report(report.completed, &report.failed);
         }
