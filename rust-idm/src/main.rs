@@ -148,6 +148,41 @@ async fn main() -> Result<()> {
             print_report(report.completed, &report.failed);
         }
 
+        Command::Import { file, dir, connections, parallel, limit, at, all, save } => {
+            let found = parse_link_file(&file, &dir)?;
+            if found.is_empty() {
+                bail!("no http/https links found in {}", file.display());
+            }
+            println!("found {} link(s) in {}", found.len(), file.display());
+
+            // The picker needs a real terminal, so run it off the async runtime.
+            let jobs = if all {
+                found
+            } else {
+                tokio::task::spawn_blocking(move || choose_jobs(found)).await??
+            };
+
+            if jobs.is_empty() {
+                println!("nothing selected");
+                return Ok(());
+            }
+            println!("{} link(s) selected", jobs.len());
+
+            if let Some(path) = save {
+                write_queue_file(&jobs, &path)?;
+                println!("saved to {} - run: rdm queue {}", path.display(), path.display());
+                return Ok(());
+            }
+
+            if let Some(at) = at {
+                wait_until(&at).await?;
+            }
+            let limit = parse_size(&limit)?;
+            let downloader = Downloader::new(connections, limit, cancel.clone())?;
+            let report = run_queue(downloader, jobs, parallel, cancel).await?;
+            print_report(report.completed, &report.failed);
+        }
+
         Command::Status { file } => match DownloadState::load(&file) {
             None => println!("no resume data for {}", file.display()),
             Some(state) => {
