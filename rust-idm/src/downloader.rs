@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use anyhow::{anyhow, bail, Context, Result};
 use futures::StreamExt;
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use indicatif::MultiProgress;
 use reqwest::header::{ACCEPT_RANGES, CONTENT_LENGTH, ETAG, RANGE};
 use reqwest::{Client, StatusCode};
 use tokio::fs::OpenOptions;
@@ -13,6 +13,7 @@ use tokio::io::{AsyncSeekExt, AsyncWriteExt};
 use tokio::sync::Mutex;
 
 use crate::limiter::RateLimiter;
+use crate::progress::Progress;
 use crate::state::{DownloadState, Segment};
 
 #[derive(Clone)]
@@ -85,7 +86,19 @@ impl Downloader {
         Ok(RemoteInfo { total, resumable, etag, filename: filename_from_url(url) })
     }
 
+    /// Replaces the cancel flag, so each GUI download can be paused on its own.
+    pub fn with_cancel(&self, cancel: Arc<AtomicBool>) -> Self {
+        let mut clone = self.clone();
+        clone.cancel = cancel;
+        clone
+    }
+
     pub async fn download(&self, url: &str, output: &Path, multi: &MultiProgress) -> Result<PathBuf> {
+        let progress = Progress::bar(multi, 0);
+        self.download_with(url, output, progress).await
+    }
+
+    pub async fn download_with(&self, url: &str, output: &Path, bar: Progress) -> Result<PathBuf> {
         let info = self.probe(url).await?;
 
         if let Some(parent) = output.parent() {
@@ -119,14 +132,7 @@ impl Downloader {
         }
         drop(file);
 
-        let bar = multi.add(ProgressBar::new(info.total.max(1)));
-        bar.set_style(
-            ProgressStyle::with_template(
-                "{msg}\n  [{bar:38.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}, eta {eta})",
-            )
-            .unwrap()
-            .progress_chars("=>-"),
-        );
+        bar.set_total(info.total.max(1));
         bar.set_message(format!(
             "{}  x{} conn{}",
             info.filename,
@@ -203,7 +209,7 @@ impl Downloader {
         url: &str,
         output: &Path,
         state: Arc<Mutex<DownloadState>>,
-        bar: ProgressBar,
+        bar: Progress,
         written: Arc<AtomicU64>,
     ) -> Result<()> {
         let (segment, resumable) = {
