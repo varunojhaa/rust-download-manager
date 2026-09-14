@@ -26,7 +26,7 @@ pub fn run() -> eframe::Result<()> {
             .with_title("rdm - Download Manager"),
         ..Default::default()
     };
-    eframe::run_native("rdm", options, Box::new(|_cc| Box::new(App::new(engine))))
+    eframe::run_native("rdm", options, Box::new(|_cc| Ok(Box::new(App::new(engine)))))
 }
 
 #[derive(PartialEq, Clone)]
