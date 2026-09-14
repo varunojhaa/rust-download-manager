@@ -1,8 +1,3 @@
-mod downloader;
-mod import;
-mod limiter;
-mod queue;
-mod state;
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -12,10 +7,10 @@ use anyhow::{bail, Result};
 use clap::{Parser, Subcommand};
 use indicatif::MultiProgress;
 
-use crate::downloader::{filename_from_url, Downloader};
-use crate::import::{choose_jobs, parse_link_file, write_queue_file};
-use crate::queue::{parse_queue_file, run_queue, Job};
-use crate::state::DownloadState;
+use rdm::downloader::{filename_from_url, Downloader};
+use rdm::import::{choose_jobs, parse_link_file, write_queue_file};
+use rdm::queue::{parse_queue_file, run_queue, Job};
+use rdm::state::DownloadState;
 
 #[derive(Parser)]
 #[command(

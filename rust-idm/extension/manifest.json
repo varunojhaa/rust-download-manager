@@ -1,0 +1,9 @@
+{
+  "manifest_version": 3,
+  "name": "rdm Download Manager",
+  "version": "0.1.0",
+  "description": "Send downloads and links from the browser to the rdm desktop app.",
+  "permissions": ["downloads", "contextMenus", "notifications"],
+  "host_permissions": ["http://127.0.0.1/*"],
+  "background": { "service_worker": "background.js" }
+}
