@@ -66,3 +66,26 @@ Features:
 The download list and settings are stored in `~/.config/rdm/state.json`; partial downloads resume through the same `.rdm.json` sidecars used by the CLI.
 
 Linux build dependencies for the GUI: `libxkbcommon`, `libX11`, `libXcursor`, `libXrandr`, `libXi`, `libGL`, `wayland`.
+
+## Build an application installer
+
+Install [`cargo-bundle`](https://github.com/burtonageo/cargobundle):
+
+```bash
+cargo install cargo-bundle
+```
+
+Then build the desktop app package for your current platform:
+
+```bash
+cd rust-idm
+cargo bundle --release --bin rdm-gui
+```
+
+Outputs:
+
+- **Linux:** `target/release/bundle/deb/*.deb` and `target/release/bundle/appimage/*.AppImage`
+- **Windows:** `target/release/bundle/msi/*.msi`
+- **macOS:** `target/release/bundle/osx/rdm.app` (drag to `/Applications`)
+
+If a platform target is not supported by `cargo-bundle`, you can still ship the raw binary from `target/release/rdm-gui`.
