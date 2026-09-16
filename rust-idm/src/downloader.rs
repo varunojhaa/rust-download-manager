@@ -6,20 +6,21 @@ use std::time::Duration;
 use anyhow::{anyhow, bail, Context, Result};
 use futures::StreamExt;
 use indicatif::MultiProgress;
-use reqwest::header::{ACCEPT_RANGES, CONTENT_LENGTH, ETAG, RANGE};
+use reqwest::header::{ACCEPT_RANGES, CONTENT_DISPOSITION, CONTENT_LENGTH, ETAG, RANGE};
 use reqwest::{Client, StatusCode};
 use tokio::fs::OpenOptions;
 use tokio::io::{AsyncSeekExt, AsyncWriteExt};
 use tokio::sync::Mutex;
 
 use crate::limiter::RateLimiter;
+use crate::net::{self, NetConfig};
 use crate::progress::Progress;
 use crate::state::{DownloadState, Segment};
 
 #[derive(Clone)]
 pub struct Downloader {
-    client: Client,
     pub connections: u64,
+    pub net: NetConfig,
     limiter: Arc<RateLimiter>,
     cancel: Arc<AtomicBool>,
 }
@@ -33,28 +34,49 @@ pub struct RemoteInfo {
 
 impl Downloader {
     pub fn new(connections: u64, limit_bytes_per_sec: u64, cancel: Arc<AtomicBool>) -> Result<Self> {
-        let client = Client::builder()
-            .user_agent("rdm/0.1 (+https://github.com/) Rust download manager")
-            .connect_timeout(Duration::from_secs(20))
-            .pool_max_idle_per_host(32)
-            .build()?;
+        Self::new_with(connections, limit_bytes_per_sec, cancel, NetConfig::default())
+    }
 
+    pub fn new_with(
+        connections: u64,
+        limit_bytes_per_sec: u64,
+        cancel: Arc<AtomicBool>,
+        net: NetConfig,
+    ) -> Result<Self> {
         Ok(Self {
-            client,
             connections: connections.max(1),
+            net,
             limiter: Arc::new(RateLimiter::new(limit_bytes_per_sec)),
             cancel,
         })
     }
 
+    async fn client(&self, url: &str) -> Result<Client> {
+        net::build_client(&self.net, url).await
+    }
+
     /// Ask the server for size + range support before splitting the work.
     pub async fn probe(&self, url: &str) -> Result<RemoteInfo> {
-        let resp = self
-            .client
+        let client = self.client(url).await?;
+        self.probe_with(&client, url).await
+    }
+
+    pub async fn probe_with(&self, client: &Client, url: &str) -> Result<RemoteInfo> {
+        let resp = client
             .head(url)
             .send()
             .await
             .with_context(|| format!("HEAD request failed for {url}"))?;
+
+        let mut filename = filename_from_url(url);
+        if let Some(name) = resp
+            .headers()
+            .get(CONTENT_DISPOSITION)
+            .and_then(|v| v.to_str().ok())
+            .and_then(filename_from_disposition)
+        {
+            filename = name;
+        }
 
         let (total, accept_ranges, etag) = if resp.status().is_success() {
             (
@@ -70,7 +92,7 @@ impl Downloader {
         let mut resumable = accept_ranges.eq_ignore_ascii_case("bytes");
         let mut total = total;
         if total == 0 || !resumable {
-            let probe = self.client.get(url).header(RANGE, "bytes=0-0").send().await?;
+            let probe = client.get(url).header(RANGE, "bytes=0-0").send().await?;
             if probe.status() == StatusCode::PARTIAL_CONTENT {
                 resumable = true;
                 if let Some(range) = probe.headers().get("content-range").and_then(|v| v.to_str().ok()) {
@@ -83,7 +105,7 @@ impl Downloader {
             }
         }
 
-        Ok(RemoteInfo { total, resumable, etag, filename: filename_from_url(url) })
+        Ok(RemoteInfo { total, resumable, etag, filename })
     }
 
     /// Replaces the cancel flag, so each GUI download can be paused on its own.
@@ -99,7 +121,15 @@ impl Downloader {
     }
 
     pub async fn download_with(&self, url: &str, output: &Path, bar: Progress) -> Result<PathBuf> {
-        let info = self.probe(url).await?;
+        let client = self.client(url).await?;
+
+        if crate::hls::is_hls(url) {
+            crate::hls::download(&client, url, output, bar.clone(), &self.limiter, self.cancel.clone()).await?;
+            bar.finish_with_message(format!("{}  done", output.display()));
+            return Ok(output.to_path_buf());
+        }
+
+        let info = self.probe_with(&client, url).await?;
 
         if let Some(parent) = output.parent() {
             if !parent.as_os_str().is_empty() {
@@ -161,13 +191,14 @@ impl Downloader {
         let mut tasks = Vec::new();
         for index in 0..segment_count {
             let this = self.clone();
+            let client = client.clone();
             let state = state.clone();
             let bar = bar.clone();
             let written = written.clone();
             let output = output.to_path_buf();
             let url = url.to_string();
             tasks.push(tokio::spawn(async move {
-                this.run_segment(index, &url, &output, state, bar, written).await
+                this.run_segment(index, &client, &url, &output, state, bar, written).await
             }));
         }
 
@@ -203,9 +234,11 @@ impl Downloader {
         Ok(output.to_path_buf())
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn run_segment(
         &self,
         index: usize,
+        client: &Client,
         url: &str,
         output: &Path,
         state: Arc<Mutex<DownloadState>>,
@@ -221,7 +254,7 @@ impl Downloader {
             return Ok(());
         }
 
-        let mut request = self.client.get(url);
+        let mut request = client.get(url);
         if resumable {
             let from = segment.start + segment.downloaded;
             let range = if segment.end >= from && segment.len() > 0 {
@@ -287,4 +320,15 @@ pub fn filename_from_url(url: &str) -> String {
         })
         .filter(|name| !name.is_empty())
         .unwrap_or_else(|| "download.bin".to_string())
+}
+
+/// `attachment; filename="report.pdf"` -> `report.pdf`
+pub fn filename_from_disposition(value: &str) -> Option<String> {
+    let lower = value.to_ascii_lowercase();
+    let idx = lower.find("filename")?;
+    let rest = &value[idx..];
+    let raw = rest.split('=').nth(1)?.trim().trim_matches('"').trim();
+    let name = raw.split(';').next()?.trim().trim_matches('"');
+    let name = name.rsplit(['/', '\\']).next()?.trim();
+    (!name.is_empty()).then(|| name.to_string())
 }
