@@ -1,0 +1,21 @@
+{
+  "manifest_version": 2,
+  "name": "rdm Download Manager",
+  "version": "0.1.0",
+  "description": "Send downloads and links from Firefox to the rdm desktop app.",
+  "permissions": [
+    "downloads",
+    "contextMenus",
+    "notifications",
+    "clipboardRead",
+    "http://127.0.0.1/*"
+  ],
+  "background": { "scripts": ["background.js"], "persistent": false },
+  "browser_action": {
+    "default_title": "rdm",
+    "default_icon": "icon.png"
+  },
+  "browser_specific_settings": {
+    "gecko": { "id": "rdm@lovable.dev", "strict_min_version": "109.0" }
+  }
+}
