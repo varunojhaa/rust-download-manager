@@ -1,10 +1,15 @@
 pub mod browser;
+#[cfg(feature = "gui")]
+pub mod clipboard;
 pub mod downloader;
 pub mod engine;
 #[cfg(feature = "gui")]
 pub mod gui;
+pub mod hls;
 pub mod import;
 pub mod limiter;
+pub mod net;
+pub mod notify;
 pub mod progress;
 pub mod queue;
 pub mod state;
