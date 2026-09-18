@@ -54,14 +54,23 @@ fn handle_request(engine: &Arc<Engine>, request: &str) -> String {
                 Err(err) => return reply(400, &format!(r#"{{"error":"{err}"}}"#)),
             };
             let filename = value.get("filename").and_then(|v| v.as_str()).map(str::to_string);
+            // Carry the page the link came from, so protected files still download.
+            let net = value.get("referer").and_then(|v| v.as_str()).map(|referer| {
+                let mut net = engine.settings.lock().unwrap().net.clone();
+                net.referer = Some(referer.to_string());
+                if let Some(cookie) = value.get("cookie").and_then(|v| v.as_str()) {
+                    net.cookie = Some(cookie.to_string());
+                }
+                net
+            });
             let mut added = 0;
             if let Some(url) = value.get("url").and_then(|v| v.as_str()) {
-                engine.add(url, filename.clone(), None);
+                engine.add_full(url, filename.clone(), None, net.clone(), 0);
                 added += 1;
             }
             if let Some(urls) = value.get("urls").and_then(|v| v.as_array()) {
                 for url in urls.iter().filter_map(|u| u.as_str()) {
-                    engine.add(url, None, None);
+                    engine.add_full(url, None, None, net.clone(), 0);
                     added += 1;
                 }
             }
