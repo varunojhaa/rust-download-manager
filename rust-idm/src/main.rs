@@ -8,6 +8,7 @@ use clap::{Parser, Subcommand};
 use indicatif::MultiProgress;
 
 use rdm::downloader::{filename_from_url, Downloader};
+use rdm::net::NetConfig;
 use rdm::import::{choose_jobs, parse_link_file, write_queue_file};
 use rdm::queue::{parse_queue_file, run_queue, Job};
 use rdm::state::DownloadState;
@@ -23,9 +24,53 @@ struct Cli {
     command: Command,
 }
 
+/// Network options shared by every downloading subcommand.
+#[derive(clap::Args, Clone, Default)]
+struct NetArgs {
+    /// Proxy URL, e.g. http://host:3128 or socks5://host:1080
+    #[arg(long)]
+    proxy: Option<String>,
+    /// Override the User-Agent header.
+    #[arg(long)]
+    user_agent: Option<String>,
+    /// Referer header sent with every request.
+    #[arg(long)]
+    referer: Option<String>,
+    /// Cookie header sent with every request.
+    #[arg(long)]
+    cookie: Option<String>,
+    /// DNS-over-HTTPS endpoint, e.g. https://cloudflare-dns.com/dns-query
+    #[arg(long)]
+    doh: Option<String>,
+    /// Extra header, repeatable: --header "Name: value"
+    #[arg(long = "header")]
+    headers: Vec<String>,
+}
+
+impl NetArgs {
+    fn config(&self) -> NetConfig {
+        NetConfig {
+            user_agent: self.user_agent.clone(),
+            proxy: self.proxy.clone(),
+            doh: self.doh.clone(),
+            referer: self.referer.clone(),
+            cookie: self.cookie.clone(),
+            headers: self
+                .headers
+                .iter()
+                .filter_map(|h| {
+                    let (k, v) = h.split_once(':')?;
+                    Some((k.trim().to_string(), v.trim().to_string()))
+                })
+                .collect(),
+            timeout_secs: 20,
+        }
+    }
+}
+
 #[derive(Subcommand)]
 enum Command {
-    /// Download one or more URLs right now.
+    /// Download one or more URLs right now (HLS .m3u8 streams included).
     Get {
         urls: Vec<String>,
         /// Output file (single URL) or directory (multiple URLs).
@@ -40,6 +85,8 @@ enum Command {
         /// Global speed cap, e.g. 2M, 500k. 0 = unlimited.
         #[arg(long, default_value = "0")]
         limit: String,
+        #[command(flatten)]
+        net: NetArgs,
     },
     /// Download every URL listed in a queue file.
     Queue {
@@ -56,6 +103,8 @@ enum Command {
         /// Start at a wall-clock time today/tomorrow, e.g. --at 02:30
         #[arg(long)]
         at: Option<String>,
+        #[command(flatten)]
+        net: NetArgs,
     },
     /// Import links from a .txt file, tick the ones you want, then queue them.
     Import {
@@ -103,12 +152,12 @@ async fn main() -> Result<()> {
     }
 
     match cli.command {
-        Command::Get { urls, output, connections, parallel, limit } => {
+        Command::Get { urls, output, connections, parallel, limit, net } => {
             if urls.is_empty() {
                 bail!("give at least one URL");
             }
             let limit = parse_size(&limit)?;
-            let downloader = Downloader::new(connections, limit, cancel.clone())?;
+            let downloader = Downloader::new_with(connections, limit, cancel.clone(), net.config())?;
 
             let jobs: Vec<Job> = if urls.len() == 1 {
                 let out = match output {
@@ -128,7 +177,7 @@ async fn main() -> Result<()> {
             print_report(report.completed, &report.failed);
         }
 
-        Command::Queue { file, dir, connections, parallel, limit, at } => {
+        Command::Queue { file, dir, connections, parallel, limit, at, net } => {
             let jobs = parse_queue_file(&file, &dir)?;
             if jobs.is_empty() {
                 bail!("queue file has no jobs");
@@ -137,7 +186,7 @@ async fn main() -> Result<()> {
                 wait_until(&at).await?;
             }
             let limit = parse_size(&limit)?;
-            let downloader = Downloader::new(connections, limit, cancel.clone())?;
+            let downloader = Downloader::new_with(connections, limit, cancel.clone(), net.config())?;
             println!("starting {} job(s), {parallel} at a time", jobs.len());
             let report = run_queue(downloader, jobs, parallel, cancel).await?;
             print_report(report.completed, &report.failed);

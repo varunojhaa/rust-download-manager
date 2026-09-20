@@ -21,13 +21,12 @@ pub fn is_hls(url: &str) -> bool {
 /// Turns `stream.m3u8` into `stream.ts` so players recognise the result.
 pub fn output_name(name: &str) -> String {
     let base = name.split('?').next().unwrap_or(name);
-    match base.to_ascii_lowercase().strip_suffix(".m3u8").or_else(|| base.to_ascii_lowercase().strip_suffix(".m3u")) {
-        Some(_) => {
-            let stem = &base[..base.rfind('.').unwrap_or(base.len())];
-            format!("{stem}.ts")
-        }
-        None => base.to_string(),
+    let lower = base.to_ascii_lowercase();
+    if lower.ends_with(".m3u8") || lower.ends_with(".m3u") {
+        let stem = &base[..base.rfind('.').unwrap_or(base.len())];
+        return format!("{stem}.ts");
     }
+    base.to_string()
 }
 
 pub async fn download(
