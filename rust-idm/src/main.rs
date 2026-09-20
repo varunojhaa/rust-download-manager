@@ -8,6 +8,7 @@ use clap::{Parser, Subcommand};
 use indicatif::MultiProgress;
 
 use rdm::downloader::{filename_from_url, Downloader};
+use rdm::net::NetConfig;
 use rdm::import::{choose_jobs, parse_link_file, write_queue_file};
 use rdm::queue::{parse_queue_file, run_queue, Job};
 use rdm::state::DownloadState;
