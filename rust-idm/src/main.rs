@@ -152,12 +152,12 @@ async fn main() -> Result<()> {
     }
 
     match cli.command {
-        Command::Get { urls, output, connections, parallel, limit } => {
+        Command::Get { urls, output, connections, parallel, limit, net } => {
             if urls.is_empty() {
                 bail!("give at least one URL");
             }
             let limit = parse_size(&limit)?;
-            let downloader = Downloader::new(connections, limit, cancel.clone())?;
+            let downloader = Downloader::new_with(connections, limit, cancel.clone(), net.config())?;
 
             let jobs: Vec<Job> = if urls.len() == 1 {
                 let out = match output {
@@ -177,7 +177,7 @@ async fn main() -> Result<()> {
             print_report(report.completed, &report.failed);
         }
 
-        Command::Queue { file, dir, connections, parallel, limit, at } => {
+        Command::Queue { file, dir, connections, parallel, limit, at, net } => {
             let jobs = parse_queue_file(&file, &dir)?;
             if jobs.is_empty() {
                 bail!("queue file has no jobs");
@@ -186,7 +186,7 @@ async fn main() -> Result<()> {
                 wait_until(&at).await?;
             }
             let limit = parse_size(&limit)?;
-            let downloader = Downloader::new(connections, limit, cancel.clone())?;
+            let downloader = Downloader::new_with(connections, limit, cancel.clone(), net.config())?;
             println!("starting {} job(s), {parallel} at a time", jobs.len());
             let report = run_queue(downloader, jobs, parallel, cancel).await?;
             print_report(report.completed, &report.failed);
