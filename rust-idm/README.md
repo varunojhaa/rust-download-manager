@@ -53,15 +53,25 @@ cargo run --release --bin rdm-gui
 
 Features:
 
-- **Downloads list** with live progress, speed, pause / resume / retry / remove / delete file, and "open folder" when finished.
+- **Downloads list** with live progress, speed, ETA, search, sorting, pause / resume / retry / restart / remove / delete file, copy link, open file and open folder.
+- **Automatic retry**: failed downloads are retried a configurable number of times after a configurable delay.
 - **Categories**: files are sorted automatically into Music, Video, Documents, Compressed, Programs and Other folders inside the save folder. Categories and their extensions are editable in Settings.
-- **Queues & scheduling**: any number of queues, each with an optional local `HH:MM` start and stop time. Downloads only run inside their queue window; a running download pauses when its window closes.
-- **Settings**: save folder, simultaneous downloads, connections per download, global speed limit.
+- **Queues & scheduling**: any number of queues, each with an optional local `HH:MM` start and stop time plus active weekdays. Downloads only run inside their queue window; a running download pauses when its window closes.
+- **HLS streaming**: `.m3u8` links are resolved (best variant of a master playlist) and every segment is joined into one `.ts` file.
+- **Themes**: dark, light and pure black, with a custom accent colour.
+- **Clipboard capture**: copy a download link anywhere and rdm offers to grab it (file types configurable).
+- **Notifications**: desktop notification when a download finishes or fails, plus in-app toasts.
+- **When everything finishes**: do nothing, close rdm, or shut down the computer.
+- **Network options**: proxy (HTTP/SOCKS5), custom user agent, referer, cookies, extra headers and DNS-over-HTTPS — globally or per download, plus a per-download speed limit.
 - **Link import**: "Import links…" scans a text file for links and opens a select/deselect window before adding them to the queue.
-- **Browser integration**: a local endpoint accepts links from the browser extension in `extension/`.
+- **Browser integration**: a local endpoint accepts links from the browser extensions in `extension/`.
   - `GET  http://127.0.0.1:15080/ping`
-  - `POST http://127.0.0.1:15080/add` with `{"url": "…", "filename": "…"}` or `{"urls": ["…"]}`
-  - Load `extension/` in Chrome via `chrome://extensions` → Developer mode → Load unpacked. It captures browser downloads and adds a "Download with rdm" right-click item.
+  - `POST http://127.0.0.1:15080/add` with `{"url": "…", "filename": "…", "referer": "…"}` or `{"urls": ["…"]}`
+  - Chrome/Edge: `chrome://extensions` → Developer mode → Load unpacked → `extension/`.
+  - Firefox: `about:debugging` → This Firefox → Load Temporary Add-on → pick `extension/manifest-firefox.json`.
+  - Both capture browser downloads and add "Download with rdm" plus "Download all links on this page" right-click items.
+
+The CLI takes the same network flags: `--proxy`, `--user-agent`, `--referer`, `--cookie`, `--doh`, `--header "Name: value"`.
 
 The download list and settings are stored in `~/.config/rdm/state.json`; partial downloads resume through the same `.rdm.json` sidecars used by the CLI.
 
