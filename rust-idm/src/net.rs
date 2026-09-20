@@ -103,7 +103,7 @@ async fn resolve_doh(endpoint: &str, host: &str) -> Option<IpAddr> {
         .send()
         .await
         .ok()?;
-    let value: serde_json::Value = resp.json().await.ok()?;
+    let value: serde_json::Value = serde_json::from_str(&resp.text().await.ok()?).ok()?;
     value
         .get("Answer")?
         .as_array()?
