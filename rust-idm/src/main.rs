@@ -24,9 +24,53 @@ struct Cli {
     command: Command,
 }
 
+/// Network options shared by every downloading subcommand.
+#[derive(clap::Args, Clone, Default)]
+struct NetArgs {
+    /// Proxy URL, e.g. http://host:3128 or socks5://host:1080
+    #[arg(long)]
+    proxy: Option<String>,
+    /// Override the User-Agent header.
+    #[arg(long)]
+    user_agent: Option<String>,
+    /// Referer header sent with every request.
+    #[arg(long)]
+    referer: Option<String>,
+    /// Cookie header sent with every request.
+    #[arg(long)]
+    cookie: Option<String>,
+    /// DNS-over-HTTPS endpoint, e.g. https://cloudflare-dns.com/dns-query
+    #[arg(long)]
+    doh: Option<String>,
+    /// Extra header, repeatable: --header "Name: value"
+    #[arg(long = "header")]
+    headers: Vec<String>,
+}
+
+impl NetArgs {
+    fn config(&self) -> NetConfig {
+        NetConfig {
+            user_agent: self.user_agent.clone(),
+            proxy: self.proxy.clone(),
+            doh: self.doh.clone(),
+            referer: self.referer.clone(),
+            cookie: self.cookie.clone(),
+            headers: self
+                .headers
+                .iter()
+                .filter_map(|h| {
+                    let (k, v) = h.split_once(':')?;
+                    Some((k.trim().to_string(), v.trim().to_string()))
+                })
+                .collect(),
+            timeout_secs: 20,
+        }
+    }
+}
+
 #[derive(Subcommand)]
 enum Command {
-    /// Download one or more URLs right now.
+    /// Download one or more URLs right now (HLS .m3u8 streams included).
     Get {
         urls: Vec<String>,
         /// Output file (single URL) or directory (multiple URLs).
@@ -41,6 +85,8 @@ enum Command {
         /// Global speed cap, e.g. 2M, 500k. 0 = unlimited.
         #[arg(long, default_value = "0")]
         limit: String,
+        #[command(flatten)]
+        net: NetArgs,
     },
     /// Download every URL listed in a queue file.
     Queue {
@@ -57,6 +103,8 @@ enum Command {
         /// Start at a wall-clock time today/tomorrow, e.g. --at 02:30
         #[arg(long)]
         at: Option<String>,
+        #[command(flatten)]
+        net: NetArgs,
     },
     /// Import links from a .txt file, tick the ones you want, then queue them.
     Import {
