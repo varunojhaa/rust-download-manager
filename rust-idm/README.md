@@ -99,3 +99,42 @@ Outputs:
 - **macOS:** `target/release/bundle/osx/rdm.app` (drag to `/Applications`)
 
 If a platform target is not supported by `cargo-bundle`, you can still ship the raw binary from `target/release/rdm-gui`.
+
+## Signing the released files (optional)
+
+The GitHub workflow signs each platform's files when the matching repository secrets
+exist (Settings → Secrets and variables → Actions). Leave them empty and the build
+still runs, just unsigned.
+
+**Windows (Authenticode)**
+
+| Secret | Value |
+| --- | --- |
+| `WINDOWS_CERT_BASE64` | your code-signing `.pfx`, base64 encoded |
+| `WINDOWS_CERT_PASSWORD` | password for that `.pfx` |
+| `WINDOWS_TIMESTAMP_URL` | optional, defaults to DigiCert's timestamp server |
+
+**macOS (Developer ID + notarization)**
+
+| Secret | Value |
+| --- | --- |
+| `MACOS_CERT_P12_BASE64` | Developer ID Application certificate `.p12`, base64 encoded |
+| `MACOS_CERT_PASSWORD` | password for that `.p12` |
+| `MACOS_SIGNING_IDENTITY` | e.g. `Developer ID Application: Your Name (TEAMID)` |
+| `APPLE_ID` | Apple ID email (only needed for notarization) |
+| `APPLE_TEAM_ID` | your 10-character team ID |
+| `APPLE_APP_PASSWORD` | app-specific password for that Apple ID |
+
+**Linux (GPG detached signatures)**
+
+| Secret | Value |
+| --- | --- |
+| `LINUX_GPG_PRIVATE_KEY` | exported private key (ASCII-armored or base64) |
+| `LINUX_GPG_PASSPHRASE` | passphrase for that key |
+| `LINUX_GPG_KEY_ID` | optional key ID when the keyring holds more than one |
+
+Every release also ships `SHA256SUMS.txt`, and Linux builds add a `.asc` signature per
+file plus the public key as `rdm-signing-key.asc`.
+
+Base64-encode a certificate with `base64 -w0 cert.pfx` (Linux) or
+`base64 -i cert.p12 | tr -d '\n'` (macOS).
