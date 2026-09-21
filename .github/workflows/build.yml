@@ -7,6 +7,14 @@ on:
   workflow_dispatch:
   workflow_call:
 
+# Signing is fully optional: every step below is skipped when its secret is empty,
+# so forks and unsigned builds keep working unchanged.
+env:
+  MACOS_CERT_P12_BASE64: ${{ secrets.MACOS_CERT_P12_BASE64 }}
+  MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+  WINDOWS_CERT_BASE64: ${{ secrets.WINDOWS_CERT_BASE64 }}
+  LINUX_GPG_PRIVATE_KEY: ${{ secrets.LINUX_GPG_PRIVATE_KEY }}
+
 jobs:
   build:
     name: ${{ matrix.label }}
@@ -158,6 +166,43 @@ jobs:
               ForEach-Object { Copy-Item $_.FullName dist/ -ErrorAction SilentlyContinue }
           }
           Get-ChildItem dist
+
+      # ---------- Linux GPG detached signatures ----------
+      - name: Sign Linux packages with GPG
+        if: runner.os == 'Linux' && env.LINUX_GPG_PRIVATE_KEY != ''
+        env:
+          LINUX_GPG_PRIVATE_KEY: ${{ secrets.LINUX_GPG_PRIVATE_KEY }}
+          LINUX_GPG_PASSPHRASE: ${{ secrets.LINUX_GPG_PASSPHRASE }}
+          LINUX_GPG_KEY_ID: ${{ secrets.LINUX_GPG_KEY_ID }}
+        run: |
+          export GNUPGHOME="$RUNNER_TEMP/gnupg"
+          mkdir -p "$GNUPGHOME" && chmod 700 "$GNUPGHOME"
+          echo "$LINUX_GPG_PRIVATE_KEY" | base64 --decode 2>/dev/null | gpg --batch --import \
+            || echo "$LINUX_GPG_PRIVATE_KEY" | gpg --batch --import
+          KEY_ARG=""
+          [ -n "$LINUX_GPG_KEY_ID" ] && KEY_ARG="--local-user $LINUX_GPG_KEY_ID"
+          for f in dist/*; do
+            [ -f "$f" ] || continue
+            case "$f" in *.asc|*.sha256) continue ;; esac
+            gpg --batch --yes --pinentry-mode loopback \
+              --passphrase "$LINUX_GPG_PASSPHRASE" $KEY_ARG \
+              --armor --detach-sign --output "$f.asc" "$f"
+            gpg --verify "$f.asc" "$f"
+          done
+          gpg --armor --export ${LINUX_GPG_KEY_ID:-} > dist/rdm-signing-key.asc
+          rm -rf "$GNUPGHOME"
+
+      - name: Generate checksums
+        shell: bash
+        run: |
+          cd dist
+          if command -v sha256sum >/dev/null; then
+            sha256sum * > SHA256SUMS.txt
+          else
+            shasum -a 256 * > SHA256SUMS.txt
+          fi
+          cat SHA256SUMS.txt
+
 
       - uses: actions/upload-artifact@v4
         with:
