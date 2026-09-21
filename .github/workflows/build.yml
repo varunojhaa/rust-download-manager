@@ -1,0 +1,97 @@
+name: Build rdm
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: linux-x86_64
+          - os: windows-latest
+            label: windows-x86_64
+          - os: macos-14
+            label: macos-arm64
+          - os: macos-13
+            label: macos-x86_64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust-idm
+
+      - name: Install Linux GUI dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libxkbcommon-dev libx11-dev libxcursor-dev libxrandr-dev libxi-dev \
+            libgl1-mesa-dev libwayland-dev pkg-config libssl-dev squashfs-tools
+
+      - name: Build release binaries
+        working-directory: rust-idm
+        run: cargo build --release --bins
+
+      - name: Run tests
+        if: runner.os == 'Linux'
+        working-directory: rust-idm
+        run: cargo test --release
+
+      - name: Install cargo-bundle
+        continue-on-error: true
+        run: cargo install cargo-bundle --locked
+
+      - name: Package application
+        continue-on-error: true
+        working-directory: rust-idm
+        run: cargo bundle --release --bin rdm-gui
+
+      - name: Collect artifacts (unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp rust-idm/target/release/rdm dist/ 2>/dev/null || true
+          cp rust-idm/target/release/rdm-gui dist/ 2>/dev/null || true
+          if [ -d rust-idm/target/release/bundle ]; then
+            find rust-idm/target/release/bundle -maxdepth 2 -mindepth 1 -name '*.deb' -o -name '*.AppImage' -o -name '*.rpm' | while read -r f; do cp "$f" dist/; done
+            if [ -d "rust-idm/target/release/bundle/osx" ]; then
+              for app in rust-idm/target/release/bundle/osx/*.app; do
+                [ -e "$app" ] || continue
+                (cd "$(dirname "$app")" && zip -qry "$GITHUB_WORKSPACE/dist/$(basename "$app" .app)-${{ matrix.label }}.app.zip" "$(basename "$app")")
+              done
+            fi
+          fi
+          ls -la dist
+
+      - name: Collect artifacts (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item rust-idm/target/release/rdm.exe dist/ -ErrorAction SilentlyContinue
+          Copy-Item rust-idm/target/release/rdm-gui.exe dist/ -ErrorAction SilentlyContinue
+          if (Test-Path rust-idm/target/release/bundle) {
+            Get-ChildItem -Path rust-idm/target/release/bundle -Recurse -Include *.msi,*.exe |
+              ForEach-Object { Copy-Item $_.FullName dist/ -ErrorAction SilentlyContinue }
+          }
+          Get-ChildItem dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rdm-${{ matrix.label }}
+          path: dist/*
+          if-no-files-found: error
