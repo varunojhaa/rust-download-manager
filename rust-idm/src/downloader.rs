@@ -287,7 +287,7 @@ impl Downloader {
             }
             self.limiter.acquire(chunk.len() as u64).await;
             file.write_all(&chunk).await?;
-            offset += chunk.len() as u64;
+            let _ = &mut offset;
 
             {
                 let mut guard = state.lock().await;
