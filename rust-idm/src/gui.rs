@@ -645,6 +645,39 @@ impl App {
         }
     }
 
+    fn clear_all_window(&mut self, ctx: &egui::Context) {
+        if !self.confirm_clear_all {
+            return;
+        }
+        let mut open = true;
+        egui::Window::new("Clear download history")
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .show(ctx, |ui| {
+                let count = self.engine.items.lock().unwrap().len();
+                ui.label(format!("Remove all {count} download(s) from the list?"));
+                ui.add_space(8.0);
+                ui.horizontal(|ui| {
+                    if ui.button("Clear list only").clicked() {
+                        self.engine.clear_all(false);
+                        self.confirm_clear_all = false;
+                    }
+                    if ui.button("Clear list and delete files").clicked() {
+                        self.engine.clear_all(true);
+                        self.confirm_clear_all = false;
+                    }
+                    if ui.button("Cancel").clicked() {
+                        self.confirm_clear_all = false;
+                    }
+                });
+            });
+        if !open {
+            self.confirm_clear_all = false;
+        }
+    }
+
     fn import_window(&mut self, ctx: &egui::Context) {
         if !self.show_import {
             return;
