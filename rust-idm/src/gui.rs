@@ -81,6 +81,7 @@ struct App {
     show_add: bool,
     show_settings: bool,
     show_import: bool,
+    confirm_clear_all: bool,
     add_urls: String,
     add_name: String,
     add_queue: String,
@@ -113,6 +114,7 @@ impl App {
             show_add: false,
             show_settings: false,
             show_import: false,
+            confirm_clear_all: false,
             add_urls: String::new(),
             add_name: String::new(),
             add_queue,
@@ -140,6 +142,7 @@ impl eframe::App for App {
         self.list(ctx);
         self.add_window(ctx);
         self.import_window(ctx);
+        self.clear_all_window(ctx);
         self.details_window(ctx);
         self.clipboard_window(ctx);
         self.settings_window(ctx);
@@ -252,6 +255,13 @@ impl App {
                 }
                 if ui.button("Clear finished").clicked() {
                     self.engine.clear_completed();
+                }
+                if ui
+                    .button("Clear history")
+                    .on_hover_text("Remove every download from the list")
+                    .clicked()
+                {
+                    self.confirm_clear_all = true;
                 }
                 ui.separator();
                 if ui.button("Settings").clicked() {
@@ -633,6 +643,39 @@ impl App {
             } else {
                 pending.retain(|l| !accepted.contains(l));
             }
+        }
+    }
+
+    fn clear_all_window(&mut self, ctx: &egui::Context) {
+        if !self.confirm_clear_all {
+            return;
+        }
+        let mut open = true;
+        egui::Window::new("Clear download history")
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .show(ctx, |ui| {
+                let count = self.engine.items.lock().unwrap().len();
+                ui.label(format!("Remove all {count} download(s) from the list?"));
+                ui.add_space(8.0);
+                ui.horizontal(|ui| {
+                    if ui.button("Clear list only").clicked() {
+                        self.engine.clear_all(false);
+                        self.confirm_clear_all = false;
+                    }
+                    if ui.button("Clear list and delete files").clicked() {
+                        self.engine.clear_all(true);
+                        self.confirm_clear_all = false;
+                    }
+                    if ui.button("Cancel").clicked() {
+                        self.confirm_clear_all = false;
+                    }
+                });
+            });
+        if !open {
+            self.confirm_clear_all = false;
         }
     }
 
