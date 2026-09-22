@@ -54,6 +54,3 @@ copyright = "Copyright (c) 2026"
 category = "Utility"
 short_description = "Fast, resumable, multi-connection download manager"
 long_description = "rdm is a fast, resumable, multi-connection download manager with queues, scheduling, categories, browser integration and an egui desktop interface."
-linux_mime_types = ["application/x-bittorrent"]
-linux_exec = "%f"
-osx_minimum_system_version = "10.11"
