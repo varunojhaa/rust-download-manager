@@ -63,9 +63,18 @@ jobs:
         run: cargo install cargo-bundle --locked
 
       - name: Package application
+        if: runner.os != 'Windows'
         continue-on-error: true
         working-directory: rust-idm
         run: cargo bundle --release --bin rdm-gui
+
+      # On Windows the package format must be given explicitly, otherwise
+      # cargo-bundle looks for the executable without the .exe suffix.
+      - name: Package application (windows)
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        working-directory: rust-idm
+        run: cargo bundle --release --bin rdm-gui --format msi
 
       # ---------- macOS code signing + notarization ----------
       - name: Import Apple signing certificate

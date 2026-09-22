@@ -271,7 +271,7 @@ impl Downloader {
         }
 
         let mut file = OpenOptions::new().write(true).open(output).await?;
-        let mut offset = if resumable { segment.start + segment.downloaded } else { 0 };
+        let offset = if resumable { segment.start + segment.downloaded } else { 0 };
         file.seek(std::io::SeekFrom::Start(offset)).await?;
 
         let mut stream = response.bytes_stream();
@@ -287,7 +287,6 @@ impl Downloader {
             }
             self.limiter.acquire(chunk.len() as u64).await;
             file.write_all(&chunk).await?;
-            offset += chunk.len() as u64;
 
             {
                 let mut guard = state.lock().await;

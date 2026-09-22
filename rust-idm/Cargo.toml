@@ -54,3 +54,13 @@ copyright = "Copyright (c) 2026"
 category = "Utility"
 short_description = "Fast, resumable, multi-connection download manager"
 long_description = "rdm is a fast, resumable, multi-connection download manager with queues, scheduling, categories, browser integration and an egui desktop interface."
+
+[package.metadata.bundle.bin.rdm-gui]
+name = "rdm"
+identifier = "dev.lovable.rdm"
+icon = ["icons/icon_512x512.png"]
+version = "0.1.0"
+copyright = "Copyright (c) 2026"
+category = "Utility"
+short_description = "Fast, resumable, multi-connection download manager"
+long_description = "rdm is a fast, resumable, multi-connection download manager with queues, scheduling, categories, browser integration and an egui desktop interface."
