@@ -255,6 +255,13 @@ impl App {
                 if ui.button("Clear finished").clicked() {
                     self.engine.clear_completed();
                 }
+                if ui
+                    .button("Clear history")
+                    .on_hover_text("Remove every download from the list")
+                    .clicked()
+                {
+                    self.confirm_clear_all = true;
+                }
                 ui.separator();
                 if ui.button("Settings").clicked() {
                     self.show_settings = true;
