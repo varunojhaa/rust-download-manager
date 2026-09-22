@@ -469,6 +469,22 @@ impl Engine {
         self.save();
     }
 
+    /// Empties the whole download list. Files already on disk are kept;
+    /// when `delete_files` is set, downloaded and partial files go too.
+    pub fn clear_all(self: &Arc<Self>, delete_files: bool) {
+        self.pause_all();
+        let mut items = self.items.lock().unwrap();
+        if delete_files {
+            for item in items.iter() {
+                let _ = std::fs::remove_file(item.path());
+                DownloadState::clear(&item.path());
+            }
+        }
+        items.clear();
+        drop(items);
+        self.save();
+    }
+
     fn set_status(self: &Arc<Self>, id: Id, status: Status) {
         let mut items = self.items.lock().unwrap();
         if let Some(item) = items.iter_mut().find(|i| i.id == id) {
