@@ -142,6 +142,7 @@ impl eframe::App for App {
         self.list(ctx);
         self.add_window(ctx);
         self.import_window(ctx);
+        self.clear_all_window(ctx);
         self.details_window(ctx);
         self.clipboard_window(ctx);
         self.settings_window(ctx);
