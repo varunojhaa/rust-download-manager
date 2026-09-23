@@ -3,6 +3,7 @@ name = "rdm"
 version = "0.1.0"
 edition = "2021"
 description = "rdm - a fast, resumable, multi-connection download manager (IDM alternative) written in Rust"
+authors = ["rdm contributors"]
 license = "MIT"
 
 [lib]
