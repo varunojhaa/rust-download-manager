@@ -59,8 +59,13 @@ jobs:
         run: cargo test --release
 
       - name: Install cargo-bundle
+        if: runner.os != 'Windows'
         continue-on-error: true
         run: cargo install cargo-bundle --locked
+
+      - name: Install cargo-wix
+        if: runner.os == 'Windows'
+        run: cargo install cargo-wix --locked
 
       - name: Package application
         if: runner.os != 'Windows'
@@ -68,13 +73,12 @@ jobs:
         working-directory: rust-idm
         run: cargo bundle --release --bin rdm-gui
 
-      # On Windows the package format must be given explicitly, otherwise
-      # cargo-bundle looks for the executable without the .exe suffix.
-      - name: Package application (windows)
+      # cargo-bundle's experimental MSI writer rejects executable names in its
+      # Component KeyPath. cargo-wix uses the standard WiX toolchain instead.
+      - name: Package Windows installer
         if: runner.os == 'Windows'
-        continue-on-error: true
         working-directory: rust-idm
-        run: cargo bundle --release --bin rdm-gui --format msi
+        run: cargo wix --nocapture
 
       # ---------- macOS code signing + notarization ----------
       - name: Import Apple signing certificate
@@ -138,6 +142,9 @@ jobs:
           if (Test-Path rust-idm/target/release/bundle) {
             $targets += Get-ChildItem rust-idm/target/release/bundle -Recurse -Include *.msi,*.exe
           }
+          if (Test-Path rust-idm/target/wix) {
+            $targets += Get-ChildItem rust-idm/target/wix -Recurse -Include *.msi
+          }
           foreach ($t in $targets) {
             & $signtool.FullName sign /f $pfx /p $env:WINDOWS_CERT_PASSWORD /fd SHA256 /tr $ts /td SHA256 $t.FullName
             if ($LASTEXITCODE -ne 0) { throw "signtool failed for $($t.FullName)" }
@@ -170,8 +177,8 @@ jobs:
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           Copy-Item rust-idm/target/release/rdm.exe dist/ -ErrorAction SilentlyContinue
           Copy-Item rust-idm/target/release/rdm-gui.exe dist/ -ErrorAction SilentlyContinue
-          if (Test-Path rust-idm/target/release/bundle) {
-            Get-ChildItem -Path rust-idm/target/release/bundle -Recurse -Include *.msi,*.exe |
+          if (Test-Path rust-idm/target/wix) {
+            Get-ChildItem -Path rust-idm/target/wix -Recurse -Include *.msi |
               ForEach-Object { Copy-Item $_.FullName dist/ -ErrorAction SilentlyContinue }
           }
           Get-ChildItem dist
