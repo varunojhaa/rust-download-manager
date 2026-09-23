@@ -79,7 +79,7 @@ Linux build dependencies for the GUI: `libxkbcommon`, `libX11`, `libXcursor`, `l
 
 ## Build an application installer
 
-Install [`cargo-bundle`](https://github.com/burtonageo/cargobundle):
+Linux and macOS use [`cargo-bundle`](https://github.com/burtonageo/cargobundle):
 
 ```bash
 cargo install cargo-bundle
@@ -92,10 +92,18 @@ cd rust-idm
 cargo bundle --release --bin rdm-gui
 ```
 
+Windows uses [`cargo-wix`](https://github.com/volks73/cargo-wix) and the WiX Toolset
+instead of `cargo-bundle`'s experimental MSI writer:
+
+```powershell
+cargo install cargo-wix --locked
+cargo wix --nocapture
+```
+
 Outputs:
 
 - **Linux:** `target/release/bundle/deb/*.deb` and `target/release/bundle/appimage/*.AppImage`
-- **Windows:** `target/release/bundle/msi/*.msi`
+- **Windows:** `target/wix/*.msi`
 - **macOS:** `target/release/bundle/osx/rdm.app` (drag to `/Applications`)
 
 If a platform target is not supported by `cargo-bundle`, you can still ship the raw binary from `target/release/rdm-gui`.
