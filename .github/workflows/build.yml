@@ -73,13 +73,6 @@ jobs:
         working-directory: rust-idm
         run: cargo bundle --release --bin rdm-gui
 
-      # cargo-bundle's experimental MSI writer rejects executable names in its
-      # Component KeyPath. cargo-wix uses the standard WiX toolchain instead.
-      - name: Package Windows installer
-        if: runner.os == 'Windows'
-        working-directory: rust-idm
-        run: cargo wix --nocapture
-
       # ---------- macOS code signing + notarization ----------
       - name: Import Apple signing certificate
         if: runner.os == 'macOS' && env.MACOS_CERT_P12_BASE64 != ''
@@ -124,7 +117,7 @@ jobs:
           done
 
       # ---------- Windows Authenticode signing ----------
-      - name: Sign Windows binaries and installer
+      - name: Sign Windows binaries
         if: runner.os == 'Windows' && env.WINDOWS_CERT_BASE64 != ''
         shell: pwsh
         env:
@@ -139,12 +132,33 @@ jobs:
             Sort-Object FullName -Descending | Select-Object -First 1
           $targets = @()
           $targets += Get-ChildItem rust-idm/target/release/*.exe -ErrorAction SilentlyContinue
-          if (Test-Path rust-idm/target/release/bundle) {
-            $targets += Get-ChildItem rust-idm/target/release/bundle -Recurse -Include *.msi,*.exe
+          foreach ($t in $targets) {
+            & $signtool.FullName sign /f $pfx /p $env:WINDOWS_CERT_PASSWORD /fd SHA256 /tr $ts /td SHA256 $t.FullName
+            if ($LASTEXITCODE -ne 0) { throw "signtool failed for $($t.FullName)" }
           }
-          if (Test-Path rust-idm/target/wix) {
-            $targets += Get-ChildItem rust-idm/target/wix -Recurse -Include *.msi
-          }
+          Remove-Item $pfx -Force
+
+      # cargo-bundle's experimental MSI writer rejects executable names in its
+      # Component KeyPath. cargo-wix uses the standard WiX toolchain instead.
+      - name: Package Windows installer
+        if: runner.os == 'Windows'
+        working-directory: rust-idm
+        run: cargo wix --no-build --nocapture
+
+      - name: Sign Windows installer
+        if: runner.os == 'Windows' && env.WINDOWS_CERT_BASE64 != ''
+        shell: pwsh
+        env:
+          WINDOWS_CERT_BASE64: ${{ secrets.WINDOWS_CERT_BASE64 }}
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+          WINDOWS_TIMESTAMP_URL: ${{ secrets.WINDOWS_TIMESTAMP_URL }}
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP "cert.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERT_BASE64))
+          $ts = if ($env:WINDOWS_TIMESTAMP_URL) { $env:WINDOWS_TIMESTAMP_URL } else { "http://timestamp.digicert.com" }
+          $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe" |
+            Sort-Object FullName -Descending | Select-Object -First 1
+          $targets = Get-ChildItem rust-idm/target/wix -Recurse -Include *.msi
           foreach ($t in $targets) {
             & $signtool.FullName sign /f $pfx /p $env:WINDOWS_CERT_PASSWORD /fd SHA256 /tr $ts /td SHA256 $t.FullName
             if ($LASTEXITCODE -ne 0) { throw "signtool failed for $($t.FullName)" }
